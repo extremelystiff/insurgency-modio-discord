@@ -4,7 +4,8 @@
   "description": "Discord application for generating Insurgency: Sandstorm mod state.json files",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "register": "node register-commands.js"
   },
   "dependencies": {
     "express": "^4.18.2",
