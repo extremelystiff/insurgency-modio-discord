@@ -1,0 +1,14 @@
+{
+  "name": "insurgency-modio-discord",
+  "version": "1.0.0",
+  "description": "Discord application for generating Insurgency: Sandstorm mod state.json files",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "node-fetch": "^2.6.7",
+    "dotenv": "^16.0.3"
+  }
+}
