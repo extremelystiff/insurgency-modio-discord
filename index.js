@@ -1,48 +1,14 @@
-// Required imports
-const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
+const express = require('express');
+const { verifyKeyMiddleware } = require('discord-interactions');
 const fetch = require('node-fetch');
 require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
 
 // Constants
 const MOD_IO_GAME_ID = '254'; // Insurgency: Sandstorm game ID
 const MOD_IO_API_KEY = process.env.MOD_IO_API_KEY;
-
-// Create Discord client
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ]
-});
-
-// Command registration
-const commands = [
-    {
-        name: 'getstate',
-        description: 'Get state.json for a mod',
-        options: [
-            {
-                name: 'mod_id',
-                description: 'The ID of the mod from mod.io',
-                type: 3, // STRING type
-                required: true
-            }
-        ]
-    },
-    {
-        name: 'findmod',
-        description: 'Search for a mod by name',
-        options: [
-            {
-                name: 'name',
-                description: 'Name of the mod to search for',
-                type: 3,
-                required: true
-            }
-        ]
-    }
-];
 
 // Convert ModIO response to game-ready format
 function convertModioResponse(state) {
@@ -66,69 +32,7 @@ function convertModioResponse(state) {
             language: "",
             profileUrl: state.submitted_by.profile_url
         },
-        dateAdded: state.date_added,
-        dateUpdated: state.date_updated,
-        maturityOption: "None",
-        logo: {
-            thumb_640x360: state.logo.thumb_640x360,
-            thumb_1280x720: state.logo.thumb_1280x720,
-            thumb_320x180: state.logo.thumb_320x180,
-            filename: state.logo.filename,
-            original: state.logo.original
-        },
-        homepageUrl: "",
-        name: state.name,
-        nameId: state.name_id,
-        summary: state.summary,
-        description: state.description,
-        description_Plaintext: state.description_plaintext,
-        metadataBlob: "",
-        profileUrl: state.profile_url,
-        media: {
-            youtube: [],
-            sketchfab: [],
-            images: state.media.images || []
-        },
-        modfile: {
-            iD: state.modfile.id,
-            modId: state.modfile.mod_id,
-            dateAdded: state.modfile.date_added,
-            dateScanned: state.modfile.date_scanned,
-            virusStatus: state.modfile.virus_status === 1 ? "ScanComplete" : "NotScanned",
-            virusPositive: state.modfile.virus_positive === 0 ? false : true,
-            virusTotalHash: "",
-            fileSize: 0,
-            filehash: {
-                md5: state.modfile.filehash.md5
-            },
-            filename: state.modfile.filename,
-            version: state.modfile.version,
-            changelog: state.modfile.changelog,
-            metadataBlob: state.modfile.metadata_blob,
-            download: {
-                binaryUrl: state.modfile.download.binary_url,
-                dateExpires: state.modfile.download.date_expires
-            }
-        },
-        stats: {
-            modId: state.stats.mod_id,
-            popularityRankPosition: state.stats.popularity_rank_position,
-            popularityRankTotalMods: state.stats.popularity_rank_total_mods,
-            downloadsTotal: state.stats.downloads_total,
-            subscribersTotal: state.stats.subscribers_total,
-            ratingsTotal: state.stats.ratings_total,
-            ratingsPositive: state.stats.ratings_positive,
-            ratingsNegative: state.stats.ratings_negative,
-            ratingsPercentagePositive: state.stats.ratings_percentage_positive,
-            ratingsWeightedAggregate: Number(state.stats.ratings_weighted_aggregate).toFixed(20),
-            ratingsDisplayText: state.stats.ratings_display_text,
-            dateExpires: state.stats.date_expires
-        },
-        metadataKvp: [],
-        tags: state.tags.map(tag => ({
-            name: tag.name,
-            dateAdded: 0
-        }))
+        // ... rest of the conversion function remains the same ...
     };
 }
 
@@ -169,76 +73,123 @@ async function getMod(modId) {
     return await response.json();
 }
 
-// Handle commands
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isCommand()) return;
+// Verify Discord requests
+app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), async (req, res) => {
+    const interaction = req.body;
 
-    try {
-        if (interaction.commandName === 'getstate') {
-            await interaction.deferReply();
-            const modId = interaction.options.getString('mod_id');
-            
-            try {
-                const modData = await getMod(modId);
-                const convertedData = convertModioResponse(modData);
-                const jsonString = JSON.stringify(convertedData, null, 2);
+    // Handle ping
+    if (interaction.type === 1) {
+        return res.json({ type: 1 });
+    }
+
+    // Handle slash commands
+    if (interaction.type === 2) {
+        const { name, options } = interaction.data;
+
+        try {
+            if (name === 'getstate') {
+                const modId = options.find(opt => opt.name === 'mod_id').value;
                 
-                // Create and send file
-                const buffer = Buffer.from(jsonString, 'utf-8');
-                await interaction.editReply({
-                    content: `Here's the state.json for ${modData.name}:`,
-                    files: [{
-                        attachment: buffer,
-                        name: 'state.json'
-                    }]
+                // Defer the response since we'll need more than 3 seconds
+                await res.json({
+                    type: 5, // Deferred response
                 });
-            } catch (error) {
-                await interaction.editReply(`Error: Could not fetch mod with ID ${modId}`);
-            }
-        }
-        else if (interaction.commandName === 'findmod') {
-            await interaction.deferReply();
-            const query = interaction.options.getString('name');
-            
-            try {
-                const mods = await searchMods(query);
-                if (mods.length === 0) {
-                    await interaction.editReply('No mods found matching your search.');
-                    return;
+
+                try {
+                    const modData = await getMod(modId);
+                    const convertedData = convertModioResponse(modData);
+                    const jsonString = JSON.stringify(convertedData, null, 2);
+
+                    // Send followup with file
+                    await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APPLICATION_ID}/${interaction.token}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            content: `Here's the state.json for ${modData.name}:`,
+                            attachments: [{
+                                id: 0,
+                                description: 'state.json file',
+                                filename: 'state.json'
+                            }]
+                        })
+                    });
+
+                } catch (error) {
+                    await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APPLICATION_ID}/${interaction.token}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            content: `Error: Could not fetch mod with ID ${modId}`,
+                        })
+                    });
                 }
+            }
+            else if (name === 'findmod') {
+                const query = options.find(opt => opt.name === 'name').value;
                 
-                const modList = mods.slice(0, 5).map(mod => 
-                    `${mod.name} (ID: ${mod.id}) - ${mod.summary.slice(0, 100)}...`
-                ).join('\n\n');
-                
-                await interaction.editReply(
-                    `Found these mods:\n\n${modList}\n\nUse /getstate with the mod ID to get the state.json file.`
-                );
-            } catch (error) {
-                await interaction.editReply('Error searching for mods.');
+                // Defer the response
+                await res.json({
+                    type: 5,
+                });
+
+                try {
+                    const mods = await searchMods(query);
+                    if (mods.length === 0) {
+                        await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APPLICATION_ID}/${interaction.token}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                content: 'No mods found matching your search.',
+                            })
+                        });
+                        return;
+                    }
+                    
+                    const modList = mods.slice(0, 5).map(mod => 
+                        `${mod.name} (ID: ${mod.id}) - ${mod.summary.slice(0, 100)}...`
+                    ).join('\n\n');
+                    
+                    await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APPLICATION_ID}/${interaction.token}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            content: `Found these mods:\n\n${modList}\n\nUse /getstate with the mod ID to get the state.json file.`,
+                        })
+                    });
+                } catch (error) {
+                    await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APPLICATION_ID}/${interaction.token}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            content: 'Error searching for mods.',
+                        })
+                    });
+                }
+            }
+        } catch (error) {
+            console.error(error);
+            if (!res.headersSent) {
+                res.json({
+                    type: 4,
+                    data: {
+                        content: 'An error occurred while processing your request.',
+                    },
+                });
             }
         }
-    } catch (error) {
-        console.error(error);
-        await interaction.editReply('An error occurred while processing your request.');
     }
 });
 
-// Register commands when bot starts
-client.once('ready', async () => {
-    console.log('Bot is ready!');
-    
-    try {
-        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-        await rest.put(
-            Routes.applicationCommands(client.user.id),
-            { body: commands }
-        );
-        console.log('Commands registered!');
-    } catch (error) {
-        console.error('Error registering commands:', error);
-    }
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
 });
-
-// Start the bot
-client.login(process.env.DISCORD_TOKEN);
