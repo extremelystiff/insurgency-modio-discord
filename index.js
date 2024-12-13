@@ -217,8 +217,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
                 const webhookUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APPLICATION_ID}/${interaction.token}`;
                 await sendDiscordFile(
                     webhookUrl,
-                    `Here's the state.json for ${modData.name}:`,
-                    'state.json',
+                    `Here's the State.json for ${modData.name}:`,
+                    'State.json',
                     jsonString
                 );
             }
