@@ -211,7 +211,27 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
                 const modData = await getMod(modId);
                 console.log('Converting mod data');
                 const convertedData = convertModioResponse(modData);
-                const jsonString = JSON.stringify(convertedData, null, 2);
+                // Custom formatting function to match original state.json format
+function formatStateJson(obj) {
+    let jsonString = JSON.stringify(obj, null, '\t');
+    
+    // Add newlines after property names for objects
+    jsonString = jsonString.replace(/": {/g, '":\n\t{');
+    
+    // Make sure all opening braces are indented exactly one tab from their property name
+    jsonString = jsonString.replace(/"submittedBy":\n\t{/g, '"submittedBy":\n\t{');
+    jsonString = jsonString.replace(/"avatar":\n\t{/g, '"avatar":\n\t\t{');
+    jsonString = jsonString.replace(/"logo":\n\t{/g, '"logo":\n\t{');
+    jsonString = jsonString.replace(/"media":\n\t{/g, '"media":\n\t{');
+    jsonString = jsonString.replace(/"modfile":\n\t{/g, '"modfile":\n\t{');
+    jsonString = jsonString.replace(/"filehash":\n\t{/g, '"filehash":\n\t\t{');
+    jsonString = jsonString.replace(/"download":\n\t{/g, '"download":\n\t\t{');
+    jsonString = jsonString.replace(/"stats":\n\t{/g, '"stats":\n\t{');
+    
+    return jsonString;
+}
+
+const jsonString = formatStateJson(convertedData);
 
                 console.log('Sending state.json to Discord');
                 const webhookUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APPLICATION_ID}/${interaction.token}`;
